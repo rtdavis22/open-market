@@ -23,6 +23,10 @@ func (s *Security) ProcessLimitOrderRequest(request LimitOrderRequest) error {
 	return nil
 }
 
+func (s *Security) SinglePriceCall() SinglePriceCallResult {
+	return s.limitOrderBook.SinglePriceCall()
+}
+
 // look in market order book.
 // should be able to buy any sell order or sell any buy order, even if it's not the best
 func (s *Security) ProcessMarketOrderRequest(request MarketOrderRequest) error {
