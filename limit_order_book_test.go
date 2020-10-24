@@ -1,8 +1,9 @@
 package main
 
 import (
-	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSinglePriceCall(t *testing.T) {
@@ -74,13 +75,8 @@ func TestSinglePriceCall(t *testing.T) {
 	})
 
 	security := exchange.GetSecurity(XOM)
-
 	callResult := security.SinglePriceCall()
 
-	if math.Abs(callResult.Price-20.0) > 0.01 {
-		t.Errorf("price is wrong")
-	}
-	if math.Abs(callResult.TraderSurplus-1.6) > 0.01 {
-		t.Errorf("surplus is wrong")
-	}
+	assert.InDelta(t, 20.0, callResult.Price, 0.01)
+	assert.InDelta(t, 1.6, callResult.TraderSurplus, 0.01)
 }
