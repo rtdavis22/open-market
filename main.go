@@ -32,8 +32,8 @@ func main() {
 	security := exchange.GetSecurity(XOM)
 
 	callResult := security.SinglePriceCall()
-	fmt.Printf("single price call price: %v\n", callResult.Price)
-	fmt.Printf("trader surplus: %v\n", callResult.TraderSurplus)
+	fmt.Printf("single price call price: %v\n", callResult.TradePrice)
+	fmt.Printf("trader surplus: %v\n", callResult.BuyerSurplus()+callResult.SellerSurplus())
 	fmt.Printf("bid/ask spread: %v\n", security.limitOrderBook.BidAskSpread())
 	fmt.Printf("estimate of value: %v\n", security.limitOrderBook.BestEstimateOfValue())
 }

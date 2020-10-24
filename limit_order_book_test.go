@@ -57,6 +57,6 @@ func TestSinglePriceCall(t *testing.T) {
 
 	callResult := book.SinglePriceCall()
 
-	assert.InDelta(t, 20.0, callResult.Price, 0.01)
-	assert.InDelta(t, 1.6, callResult.TraderSurplus, 0.01)
+	assert.InDelta(t, 20.0, callResult.TradePrice, 0.01)
+	assert.InDelta(t, 1.6, callResult.TraderSurplus(), 0.01)
 }

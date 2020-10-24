@@ -11,25 +11,36 @@ type LimitOrder struct {
 	limit float64
 }
 
+type PendingLimitOrder struct {
+	unfilled int
+	LimitOrder
+}
+
 type LimitOrderBook struct {
-	buyOrders  []LimitOrder
-	sellOrders []LimitOrder
+	buyOrders  []*PendingLimitOrder
+	sellOrders []*PendingLimitOrder
 }
 
 func NewLimitOrderBook() *LimitOrderBook {
 	return &LimitOrderBook{
-		buyOrders:  []LimitOrder{},
-		sellOrders: []LimitOrder{},
+		buyOrders:  []*PendingLimitOrder{},
+		sellOrders: []*PendingLimitOrder{},
 	}
 }
 
 func (l *LimitOrderBook) AddBuyOrder(order LimitOrder) error {
-	l.buyOrders = append(l.buyOrders, order)
+	l.buyOrders = append(l.buyOrders, &PendingLimitOrder{
+		unfilled:   order.size,
+		LimitOrder: order,
+	})
 	return nil
 }
 
 func (l *LimitOrderBook) AddSellOrder(order LimitOrder) error {
-	l.sellOrders = append(l.sellOrders, order)
+	l.sellOrders = append(l.sellOrders, &PendingLimitOrder{
+		unfilled:   order.size,
+		LimitOrder: order,
+	})
 	return nil
 }
 
@@ -61,9 +72,35 @@ func (l *LimitOrderBook) BestEstimateOfValue() float64 {
 	return (l.BestAsk() + l.BestBid()) / 2.0
 }
 
+type Trade struct {
+	buyOrder  LimitOrder
+	sellOrder LimitOrder
+	size      int
+}
+
 type SinglePriceCallResult struct {
-	Price         float64
-	TraderSurplus float64
+	Trades     []Trade
+	TradePrice float64
+}
+
+func (s SinglePriceCallResult) BuyerSurplus() float64 {
+	var surplus float64
+	for _, trade := range s.Trades {
+		surplus += (trade.buyOrder.limit - s.TradePrice) * float64(trade.size)
+	}
+	return surplus
+}
+
+func (s SinglePriceCallResult) SellerSurplus() float64 {
+	var surplus float64
+	for _, trade := range s.Trades {
+		surplus += (s.TradePrice - trade.sellOrder.limit) * float64(trade.size)
+	}
+	return surplus
+}
+
+func (s SinglePriceCallResult) TraderSurplus() float64 {
+	return s.BuyerSurplus() + s.SellerSurplus()
 }
 
 // Conduct a single-price auction and return the price of the auction and the trader surplus.
@@ -74,61 +111,42 @@ func (l *LimitOrderBook) SinglePriceCall() SinglePriceCallResult {
 	sort.SliceStable(l.sellOrders, func(i int, j int) bool {
 		return l.sellOrders[i].limit < l.sellOrders[j].limit
 	})
-	var i, j int
-	var lastPrice float64
 
-	type TransactedUnit struct {
-		size        int
-		traderLimit float64
-	}
-	boughtUnits := []TransactedUnit{}
-	soldUnits := []TransactedUnit{}
+	var i, j int
+	trades := []Trade{}
 	for i < len(l.buyOrders) && j < len(l.sellOrders) {
-		// buy price is less than sell price, we are done
-		if l.buyOrders[i].limit < l.sellOrders[j].limit {
+		buyOrder := l.buyOrders[i]
+		sellOrder := l.sellOrders[j]
+
+		// No trades left to make.
+		if buyOrder.limit < sellOrder.limit {
 			break
 		}
-		var transactionSize int
-		boughtUnit := TransactedUnit{
-			traderLimit: l.buyOrders[i].limit,
-		}
-		soldUnit := TransactedUnit{
-			traderLimit: l.sellOrders[j].limit,
-		}
-		if l.buyOrders[i].size == l.sellOrders[j].size {
-			transactionSize = l.buyOrders[i].size
-			lastPrice = l.buyOrders[i].limit // for now, using the buy price
-			i++
-			j++
-		} else if l.buyOrders[i].size < l.sellOrders[j].size {
-			transactionSize = l.buyOrders[i].size
-			l.sellOrders[j].size -= transactionSize
-			lastPrice = l.buyOrders[i].limit
+
+		var tradeSize int
+		if buyOrder.unfilled == sellOrder.unfilled {
+			tradeSize = buyOrder.unfilled
+		} else if buyOrder.unfilled < sellOrder.unfilled {
+			tradeSize = buyOrder.unfilled
 			i++
 		} else {
-			transactionSize = l.sellOrders[j].size
-			l.buyOrders[i].size -= transactionSize
-			lastPrice = l.buyOrders[i].limit
+			tradeSize = sellOrder.unfilled
 			j++
 		}
 
-		boughtUnit.size = transactionSize
-		soldUnit.size = transactionSize
+		trades = append(trades, Trade{
+			buyOrder:  buyOrder.LimitOrder,
+			sellOrder: sellOrder.LimitOrder,
+			size:      tradeSize,
+		})
 
-		boughtUnits = append(boughtUnits, boughtUnit)
-		soldUnits = append(soldUnits, soldUnit)
-	}
-
-	var traderSurplus float64
-	for _, unit := range boughtUnits {
-		traderSurplus += (unit.traderLimit - lastPrice) * float64(unit.size)
-	}
-	for _, unit := range soldUnits {
-		traderSurplus += (lastPrice - unit.traderLimit) * float64(unit.size)
+		buyOrder.unfilled -= tradeSize
+		sellOrder.unfilled -= tradeSize
 	}
 
 	return SinglePriceCallResult{
-		Price:         lastPrice,
-		TraderSurplus: traderSurplus,
+		Trades: trades,
+		// Harris says the limits of the last buy and last sell should almost always be the same.
+		TradePrice: trades[len(trades)-1].buyOrder.limit,
 	}
 }
